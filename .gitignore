@@ -55,3 +55,10 @@ settings.local.json
 # Git worktrees (per superpowers:using-git-worktrees)
 /.worktrees/
 
+# Go
+/dist/
+/vendor/
+*.test
+*.out
+coverage.out
+coverage.html
