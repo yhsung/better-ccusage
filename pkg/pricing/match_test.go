@@ -110,3 +110,40 @@ func TestLookup_Tier2Confidence(t *testing.T) {
 		t.Errorf("confidence: got %f, want (0.0, 1.0]", conf)
 	}
 }
+
+func TestLookupFuzzy_TypoMatch(t *testing.T) {
+	// "kimi-for-codin" (missing 'g') is a fuzzy match for "kimi-for-coding"
+	pt := newTestTable(t)
+	p, score := pt.LookupFuzzy("kimi-for-codin", 0.6)
+	if score < 0.6 {
+		t.Fatalf("expected match above threshold, got score %f", score)
+	}
+	if p.InputCostPerToken != 0.000001 {
+		t.Errorf("matched wrong price: got %f, want 0.000001", p.InputCostPerToken)
+	}
+}
+
+func TestLookupFuzzy_BelowThreshold(t *testing.T) {
+	pt := newTestTable(t)
+	_, score := pt.LookupFuzzy("zzzzzzzzzzz", 0.6)
+	if score >= 0.6 {
+		t.Errorf("expected no match above threshold, got score %f", score)
+	}
+}
+
+func TestLookup_Tier3Confidence(t *testing.T) {
+	// Fuzzy match — confidence must equal the score returned by LookupFuzzy.
+	pt := newTestTable(t)
+	_, conf := pt.Lookup("kimi-for-codin")
+	if conf < 0.6 || conf > 1.0 {
+		t.Errorf("confidence: got %f, want [0.6, 1.0]", conf)
+	}
+}
+
+func TestLookup_NoMatchReturnsZeroConfidence(t *testing.T) {
+	pt := newTestTable(t)
+	_, conf := pt.Lookup("totally-unrelated-model-name-zzz")
+	if conf != 0.0 {
+		t.Errorf("expected 0.0 confidence for no match, got %f", conf)
+	}
+}
