@@ -51,3 +51,7 @@ settings.local.json
 
 # local ZCode agent artifacts (plans, scratch, etc.)
 .zcode/
+
+# Git worktrees (per superpowers:using-git-worktrees)
+/.worktrees/
+
