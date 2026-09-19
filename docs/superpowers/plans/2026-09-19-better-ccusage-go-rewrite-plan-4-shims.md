@@ -444,7 +444,7 @@ git commit -m "feat(shims): add codex and opencode forwarder binaries"
 - Consumes: `transport.ToolError`; `shim.ResolveBinary`; `mcp.AddTool[CodexArgs, any]`.
 - Produces: `func CodexDaily/CodexMonthly(ctx, bin string, args CodexArgs) (*mcp.CallToolResult, any, error)`; `server.Opts` gains `CodexBin string` (empty → resolve `better-ccusage-codex` lazily per call).
 
-Args (TS `codexParametersShape` minus `timezone`/`locale` — Go CLI has no such flags; deviation recorded): `CodexArgs{Since, Until string}` forwarded as `--since/--until` when non-empty. 15s timeout. Empty subprocess output → `ToolError`. Non-JSON output → `ToolError`. Non-zero exit → `ToolError` with stderr text. Missing binary at call time → `ToolError` (isError, NOT startup failure — most installs lack the shim).
+Args (TS `codexParametersShape` minus `timezone`/`locale` — Go CLI has no such flags; deviation recorded): `CodexArgs{Since, Until string}` forwarded as `--since/--until` when non-empty. 15s timeout. Empty subprocess output → `ToolError`. Non-JSON output → `ToolError`. Non-zero exit → `ToolError` carrying the exec error text. Missing binary at call time → `ToolError` (isError, NOT startup failure — most installs lack the shim).
 
 - [ ] **Step 1: Write `apps/better-ccusage/internal/mcp/tools/codex.go`**
 
