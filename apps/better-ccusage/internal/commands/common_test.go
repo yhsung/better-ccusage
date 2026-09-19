@@ -117,3 +117,14 @@ func TestBindCommonFlags_InvalidSince(t *testing.T) {
 		t.Error("PreRunE(--since not-a-time): got nil, want error")
 	}
 }
+
+func TestBindCommonFlags_InvalidUntil(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	BindCommonFlags(cmd)
+	if err := cmd.ParseFlags([]string{"--until", "not-a-time"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.PreRunE(cmd, nil); err == nil {
+		t.Error("PreRunE(--until not-a-time): got nil, want error")
+	}
+}

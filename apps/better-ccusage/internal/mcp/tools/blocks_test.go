@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,6 +50,15 @@ func TestBlocks_Integration(t *testing.T) {
 	if !strings.Contains(tc.Text, `"daily"`) {
 		t.Errorf("Blocks: expected JSON with daily key, got: %q", tc.Text)
 	}
+	var decoded struct {
+		Daily []json.RawMessage `json:"daily"`
+	}
+	if err := json.Unmarshal([]byte(tc.Text), &decoded); err != nil {
+		t.Fatalf("Blocks: invalid JSON: %v", err)
+	}
+	if len(decoded.Daily) != 1 {
+		t.Errorf("Blocks: expected 1 block row, got %d", len(decoded.Daily))
+	}
 }
 
 func TestBlocks_NoData(t *testing.T) {
@@ -72,5 +82,27 @@ func TestBlocks_NoData(t *testing.T) {
 	}
 	if !strings.Contains(tc.Text, "NO_DATA") {
 		t.Errorf("Blocks: expected NO_DATA, got: %q", tc.Text)
+	}
+}
+
+func TestBlocks_InvalidMode(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	d := Deps{ConfigDir: t.TempDir(), DefaultMode: cost.CostAuto, Prices: nil}
+	res, _, err := Blocks(context.Background(), d, ReportArgs{Mode: "bogus"})
+	if err != nil {
+		t.Fatalf("Blocks: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("Blocks: expected IsError for bogus mode")
+	}
+	if len(res.Content) == 0 {
+		t.Fatal("Blocks: empty content")
+	}
+	tc, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("Blocks: content[0] is %T, want *mcp.TextContent", res.Content[0])
+	}
+	if !strings.Contains(tc.Text, "INVALID_ARGS") {
+		t.Errorf("Blocks: expected INVALID_ARGS, got: %q", tc.Text)
 	}
 }

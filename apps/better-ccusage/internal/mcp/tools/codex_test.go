@@ -73,3 +73,21 @@ func TestCodexDaily_MissingBin(t *testing.T) {
 		t.Fatalf("expected shim name in error, got: %+v", res.Content)
 	}
 }
+
+func TestCodexMonthly_Success(t *testing.T) {
+	bin := writeFakeCodexScript(t, `echo '{"monthly":[],"summary":{"totalTokens":0,"costUSD":0}}'`)
+	res, _, err := CodexMonthly(context.Background(), bin, CodexArgs{})
+	if err != nil {
+		t.Fatalf("CodexMonthly: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("CodexMonthly: unexpected IsError: %+v", res.Content)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(codexText(t, res)), &decoded); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if _, ok := decoded["monthly"]; !ok {
+		t.Fatalf("expected monthly key, got: %v", decoded)
+	}
+}

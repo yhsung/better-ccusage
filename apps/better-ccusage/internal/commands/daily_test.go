@@ -119,6 +119,35 @@ func TestNewDailyCmd_JQ(t *testing.T) {
 	}
 }
 
+func TestNewDailyCmd_JQAlone(t *testing.T) {
+	isolateHome(t)
+	dir := setupDailyFixture(t)
+	cmd, _ := NewDailyCmd(testPriceTable(t))
+	var buf strings.Builder
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--jq", ".daily | length", "--config-dir", dir, "--mode", "calculate"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got := strings.TrimSpace(buf.String()); got != "2" {
+		t.Errorf("expected jq-alone filtered output %q, got %q", "2", got)
+	}
+}
+
+func TestNewDailyCmd_BadJQ(t *testing.T) {
+	isolateHome(t)
+	dir := setupDailyFixture(t)
+	cmd, _ := NewDailyCmd(testPriceTable(t))
+	var buf strings.Builder
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--jq", ".daily | | |", "--config-dir", dir, "--mode", "calculate"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("Execute(--jq bad expr): got nil, want error")
+	}
+}
+
 func TestNewDailyCmd_Table(t *testing.T) {
 	isolateHome(t)
 	dir := setupDailyFixture(t)
