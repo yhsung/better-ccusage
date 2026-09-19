@@ -45,12 +45,13 @@ func StripANSI(s string) string {
 	return ansiEscape.ReplaceAllString(s, "")
 }
 
-// TrimTrailingSpaces removes trailing spaces from each line of s. Used by
-// normalize helpers to make golden files stable across terminal widths.
+// TrimTrailingSpaces removes trailing spaces and tabs from each line of s.
+// Used by normalize helpers to make golden files stable across terminal
+// widths (cells are right-padded with spaces/tabs for alignment).
 func TrimTrailingSpaces(s string) string {
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
-		lines[i] = strings.TrimRight(line, " ")
+		lines[i] = strings.TrimRight(line, " \t")
 	}
 	return strings.Join(lines, "\n")
 }
