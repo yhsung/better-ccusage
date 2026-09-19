@@ -63,7 +63,7 @@ apps/opencode/README.md               # +Go binary section (append)
 
 **Interfaces:**
 - Consumes: nothing (stdlib only).
-- Produces: `type Config struct { Target, OwnName, NoticePrefix string; NoticeLines []string; OptOutEnv string; Set map[string]string; SuppressIfUnset map[string]string }`; `func ResolveBinary(name string) (string, error)`; `func NonexistentTmp(prefix string) string`; `func Run(cfg Config, args []string) int`.
+- Produces: `type Config struct { Target, OwnName string; NoticeLines []string; OptOutEnv string; Set map[string]string; SuppressIfUnset map[string]string }`; `func ResolveBinary(name string) (string, error)`; `func NonexistentTmp(prefix string) string`; `func Run(cfg Config, args []string) int`.
 
 Semantics (TS `forwarder.ts` + `resolve-better-ccusage.ts` port):
 - `Run` filters `args` entries equal to `OwnName`, prints notice, resolves target, execs with inherited stdio + built env, returns child exit code (0 on success, child code on `*exec.ExitError`, 1 otherwise).
