@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement `apps/mcp` — the MCP server binary `better-ccusage-mcp` exposing `daily`, `session`, `monthly`, `blocks` tools over stdio and StreamableHTTP by calling `commands.X.Run` directly.
+**Goal:** Implement the MCP server binary `better-ccusage-mcp` exposing `daily`, `session`, `monthly`, `blocks` tools over stdio and StreamableHTTP by calling `commands.X.Run` directly.
 
-**Architecture:** Single binary `better-ccusage-mcp` built from `apps/mcp/cmd/better-ccusage-mcp/main.go` using cobra. `internal/tools/` handlers parse MCP args into `commands.CommonOpts` and call `commands.Daily/Monthly/Session/Blocks` directly (no subprocess); `internal/server/` registers the 4 tools on the official MCP Go SDK server; `internal/transport/` owns stdio/HTTP wiring and the sentinel-to-MCP error map.
+**Architecture:** Single binary `better-ccusage-mcp` built from `apps/better-ccusage/cmd/better-ccusage-mcp/main.go` using cobra. `internal/mcp/tools/` handlers parse MCP args into `commands.CommonOpts` and call `commands.Daily/Monthly/Session/Blocks` directly (no subprocess); `internal/mcp/server/` registers the 4 tools on the official MCP Go SDK server; `internal/mcp/transport/` owns stdio/HTTP wiring and the sentinel-to-MCP error map.
 
 **Tech Stack:** Go 1.24.4 (repo toolchain; 1.22 floor), stdlib `testing`, `github.com/spf13/cobra`, `github.com/modelcontextprotocol/go-sdk@v1.4.0` (newest release supporting go < 1.25; v1.5.0+ requires go ≥ 1.25), `github.com/cobra91/better-ccusage/apps/better-ccusage/internal/commands` + `pkg/pricing` + `pkg/terminal` (Plan 2).
 
-**Spec:** [`docs/superpowers/specs/2026-09-19-better-ccusage-go-rewrite-design.md`](../specs/2026-09-19-better-ccusage-go-rewrite-design.md) (§`apps/mcp/internal/`, §MCP tool flow, §MCP error mapping)
+**Spec:** [`docs/superpowers/specs/2026-09-19-better-ccusage-go-rewrite-design.md`](../specs/2026-09-19-better-ccusage-go-rewrite-design.md) (§`apps/better-ccusage/internal/mcp/`, §MCP tool flow, §MCP error mapping)
 
 **Plan series:**
 - ✅ Plan 1: Foundation (merged)
@@ -42,9 +42,9 @@ SDD creates `.worktrees/plan-3-mcp/` on branch `feat/go-rewrite-plan-3` from `ma
 ## File Structure (Plan 3 deliverable)
 
 ```
-apps/mcp/
+apps/better-ccusage/
 ├── cmd/better-ccusage-mcp/main.go       # cobra root: --mode/-m, --type/-t, --port/-p
-└── internal/
+└── internal/mcp/
     ├── transport/
     │   ├── errors.go                    # MapError + ErrorResult
     │   └── errors_test.go
@@ -64,14 +64,16 @@ apps/mcp/
         └── server_test.go               # in-memory list-tools + call-daily
 ```
 
+> **Layout note (SDD ruling):** the design spec sketches this under `apps/mcp/internal/`, but Go's `internal` visibility rule forbids `apps/mcp/...` from importing `apps/better-ccusage/internal/...` (compiler-verified in Task 1). All MCP code therefore lives under `apps/better-ccusage/` (`cmd/better-ccusage-mcp`, `internal/mcp/`). Behavior, tool set, and direct-`Run` calls are unchanged; only the directory prefix differs. Binary name `better-ccusage-mcp` is unaffected.
+
 ---
 
 ## Task 1: SDK dep + error map + invalid-args sentinel
 
 **Files:**
 - Modify: `go.mod`, `go.sum` (after `go get`), `apps/better-ccusage/internal/errs/errs.go` (append one sentinel)
-- Create: `apps/mcp/internal/transport/errors.go`
-- Create: `apps/mcp/internal/transport/errors_test.go`
+- Create: `apps/better-ccusage/internal/mcp/transport/errors.go`
+- Create: `apps/better-ccusage/internal/mcp/transport/errors_test.go`
 
 **Interfaces:**
 - Consumes: `apps/better-ccusage/internal/errs` sentinels (`ErrNoData`, `ErrUnknownModel`, `ErrInvalidJSON`, `ErrConfigNotFound`, `ErrIncompatibleMode`, `ErrInvalidMode`).
@@ -91,11 +93,11 @@ go get github.com/modelcontextprotocol/go-sdk@v1.4.0
 
 Keep the existing alignment (gofmt will enforce it; run `gofmt -l` after).
 
-- [ ] **Step 3: Write `apps/mcp/internal/transport/errors.go`**
+- [ ] **Step 3: Write `apps/better-ccusage/internal/mcp/transport/errors.go`**
 
 ```go
 // Package transport owns MCP transport wiring and the sentinel-to-MCP
-// error map for apps/mcp.
+// error map for the MCP server.
 package transport
 
 import (
@@ -160,7 +162,7 @@ func ToolError(err error) (*mcp.CallToolResult, any, error) {
 	return ErrorResult(code, message, HintFor(code))
 }
 
-- [ ] **Step 4: Write `apps/mcp/internal/transport/errors_test.go`**
+- [ ] **Step 4: Write `apps/better-ccusage/internal/mcp/transport/errors_test.go`**
 
 ```go
 package transport
@@ -229,8 +231,8 @@ func TestErrorResult_Shape(t *testing.T) {
 - [ ] **Step 5: Run tests**
 
 ```bash
-go test ./apps/mcp/internal/transport/... -race -count=1
-go vet ./apps/mcp/...
+go test ./apps/better-ccusage/internal/mcp/transport/... -race -count=1
+go vet ./apps/better-ccusage/...
 ```
 
 Expected: PASS (6 subtests + 1 shape test), vet clean.
@@ -238,7 +240,7 @@ Expected: PASS (6 subtests + 1 shape test), vet clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add go.mod go.sum apps/mcp/internal/transport/ apps/better-ccusage/internal/errs/errs.go
+git add go.mod go.sum apps/better-ccusage/internal/mcp/transport/ apps/better-ccusage/internal/errs/errs.go
 git commit -m "feat(mcp): add SDK dep and MCP error map"
 ```
 
@@ -247,17 +249,17 @@ git commit -m "feat(mcp): add SDK dep and MCP error map"
 ## Task 2: Tool args parsing + JSON encoding shared helpers
 
 **Files:**
-- Create: `apps/mcp/internal/tools/args.go`
-- Create: `apps/mcp/internal/tools/args_test.go`
+- Create: `apps/better-ccusage/internal/mcp/tools/args.go`
+- Create: `apps/better-ccusage/internal/mcp/tools/args_test.go`
 
 **Interfaces:**
 - Consumes: `transport.ToolError`; `commands.CommonOpts`; `cost.CostAuto/CostCalculate/CostDisplay`; `errs.ErrInvalidMode/ErrInvalidArgs`.
 - Produces: `type Deps struct { ConfigDir string; DefaultMode cost.CostMode; Prices *pricing.PriceTable }`; `type ReportArgs struct { Since, Until, Mode string }`; `func ParseCommon(d Deps, args ReportArgs) (commands.CommonOpts, error)`; `func EncodeResult(v any) (*mcp.CallToolResult, any, error)`.
 
-- [ ] **Step 1: Write `apps/mcp/internal/tools/args.go`**
+- [ ] **Step 1: Write `apps/better-ccusage/internal/mcp/tools/args.go`**
 
 ```go
-// Package tools implements the MCP tool handlers for apps/mcp.
+// Package tools implements the MCP tool handlers for the MCP server.
 // One file per tool; shared arg parsing and encoding lives here.
 package tools
 
@@ -271,7 +273,7 @@ import (
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/commands"
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/cost"
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/errs"
-	"github.com/cobra91/better-ccusage/apps/mcp/internal/transport"
+	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/mcp/transport"
 	"github.com/cobra91/better-ccusage/pkg/pricing"
 )
 
@@ -338,7 +340,7 @@ func EncodeResult(v any) (*mcp.CallToolResult, any, error) {
 
 Remove the `context` import and the `var _` seam if unused — do not ship dead code (drop both lines if no identifier in this file uses `context`).
 
-- [ ] **Step 2: Write `apps/mcp/internal/tools/args_test.go`**
+- [ ] **Step 2: Write `apps/better-ccusage/internal/mcp/tools/args_test.go`**
 
 ```go
 package tools
@@ -385,8 +387,8 @@ func TestParseCommon(t *testing.T) {
 - [ ] **Step 3: Run tests**
 
 ```bash
-go test ./apps/mcp/internal/tools/... -race -count=1
-go vet ./apps/mcp/...
+go test ./apps/better-ccusage/internal/mcp/tools/... -race -count=1
+go vet ./apps/better-ccusage/...
 ```
 
 Expected: PASS, vet clean.
@@ -394,7 +396,7 @@ Expected: PASS, vet clean.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add apps/mcp/internal/tools/
+git add apps/better-ccusage/internal/mcp/tools/
 git commit -m "feat(mcp): add shared tool arg parsing"
 ```
 
@@ -403,8 +405,8 @@ git commit -m "feat(mcp): add shared tool arg parsing"
 ## Task 3: `daily` tool
 
 **Files:**
-- Create: `apps/mcp/internal/tools/daily.go`
-- Create: `apps/mcp/internal/tools/daily_test.go`
+- Create: `apps/better-ccusage/internal/mcp/tools/daily.go`
+- Create: `apps/better-ccusage/internal/mcp/tools/daily_test.go`
 
 **Interfaces:**
 - Consumes: `ParseCommon`, `EncodeResult`, `transport.ToolError`; `commands.Daily(ctx, commands.DailyOpts, io.Discard, prices) (output.DailyResult, error)`.
@@ -412,7 +414,7 @@ git commit -m "feat(mcp): add shared tool arg parsing"
 
 For the success test fixture, mirror `apps/better-ccusage/internal/commands/daily_test.go` (fixture JSONL shape + `t.Setenv("CLAUDE_CONFIG_DIR", dir)` + `isolateHome`-style HOME shadowing — read that file first; `commands` tests shadow HOME because `ResolveDirs` appends default dirs).
 
-- [ ] **Step 1: Write `apps/mcp/internal/tools/daily.go`**
+- [ ] **Step 1: Write `apps/better-ccusage/internal/mcp/tools/daily.go`**
 
 ```go
 package tools
@@ -424,7 +426,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/commands"
-	"github.com/cobra91/better-ccusage/apps/mcp/internal/transport"
+	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/mcp/transport"
 )
 
 // Daily implements the MCP `daily` tool: usage report grouped by date.
@@ -441,15 +443,15 @@ func Daily(ctx context.Context, d Deps, args ReportArgs) (*mcp.CallToolResult, a
 }
 ```
 
-- [ ] **Step 2: Write `apps/mcp/internal/tools/daily_test.go`** with two tests:
+- [ ] **Step 2: Write `apps/better-ccusage/internal/mcp/tools/daily_test.go`** with two tests:
   - `TestDaily_Integration`: fixture dir with one `projects/p/session1.jsonl` entry (copy the entry shape from `apps/better-ccusage/internal/commands/daily_test.go`), `t.Setenv("CLAUDE_CONFIG_DIR", dir)`, shadow HOME to an empty temp dir, `Deps{ConfigDir: dir, DefaultMode: cost.CostAuto, Prices: nil}` (nil prices: `ApplyPrices` must tolerate nil via `Lookup` nil-receiver guard — if it panics, pass a table from `pricing.LoadPrices` on the embedded JSON instead and note it in the report). Call `Daily(ctx, d, ReportArgs{})`, assert `err == nil`, `res.IsError == false`, content[0] is `*mcp.TextContent` whose text parses as JSON containing a `"daily"` key.
   - `TestDaily_InvalidMode`: `Daily(ctx, d, ReportArgs{Mode: "bogus"})` → `res.IsError == true`, text contains `INVALID_ARGS`.
 
 - [ ] **Step 3: Run tests**
 
 ```bash
-go test ./apps/mcp/internal/tools/... -race -count=1 -run 'TestDaily|TestParseCommon'
-go vet ./apps/mcp/...
+go test ./apps/better-ccusage/internal/mcp/tools/... -race -count=1 -run 'TestDaily|TestParseCommon'
+go vet ./apps/better-ccusage/...
 ```
 
 Expected: PASS, vet clean.
@@ -457,7 +459,7 @@ Expected: PASS, vet clean.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add apps/mcp/internal/tools/daily.go apps/mcp/internal/tools/daily_test.go
+git add apps/better-ccusage/internal/mcp/tools/daily.go apps/better-ccusage/internal/mcp/tools/daily_test.go
 git commit -m "feat(mcp): add daily tool"
 ```
 
@@ -466,8 +468,8 @@ git commit -m "feat(mcp): add daily tool"
 ## Task 4: `session` tool
 
 **Files:**
-- Create: `apps/mcp/internal/tools/session.go`
-- Create: `apps/mcp/internal/tools/session_test.go`
+- Create: `apps/better-ccusage/internal/mcp/tools/session.go`
+- Create: `apps/better-ccusage/internal/mcp/tools/session_test.go`
 
 **Interfaces:**
 - Consumes: same seams as Task 3; `commands.Session(ctx, commands.SessionOpts, io.Discard, prices) (output.DailyResult, error)`.
@@ -475,7 +477,7 @@ git commit -m "feat(mcp): add daily tool"
 
 Mirror Task 3 exactly with `GroupBySession` behavior: the integration fixture uses two entries with the same session so they collapse to one row (mirror `apps/better-ccusage/internal/commands/session_test.go`).
 
-- [ ] **Step 1: Write `apps/mcp/internal/tools/session.go`**
+- [ ] **Step 1: Write `apps/better-ccusage/internal/mcp/tools/session.go`**
 
 ```go
 package tools
@@ -487,7 +489,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/commands"
-	"github.com/cobra91/better-ccusage/apps/mcp/internal/transport"
+	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/mcp/transport"
 )
 
 // Session implements the MCP `session` tool: usage grouped by conversation session.
@@ -504,13 +506,13 @@ func Session(ctx context.Context, d Deps, args ReportArgs) (*mcp.CallToolResult,
 }
 ```
 
-- [ ] **Step 2: Write `apps/mcp/internal/tools/session_test.go`** (`TestSession_Integration` asserting one collapsed row / JSON `"daily"` key present; `TestSession_NoData` with empty temp dir asserting `IsError == true` and text contains `NO_DATA`).
+- [ ] **Step 2: Write `apps/better-ccusage/internal/mcp/tools/session_test.go`** (`TestSession_Integration` asserting one collapsed row / JSON `"daily"` key present; `TestSession_NoData` with empty temp dir asserting `IsError == true` and text contains `NO_DATA`).
 
 - [ ] **Step 3: Run tests**
 
 ```bash
-go test ./apps/mcp/internal/tools/... -race -count=1 -run 'TestSession'
-go vet ./apps/mcp/...
+go test ./apps/better-ccusage/internal/mcp/tools/... -race -count=1 -run 'TestSession'
+go vet ./apps/better-ccusage/...
 ```
 
 Expected: PASS, vet clean.
@@ -518,7 +520,7 @@ Expected: PASS, vet clean.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add apps/mcp/internal/tools/session.go apps/mcp/internal/tools/session_test.go
+git add apps/better-ccusage/internal/mcp/tools/session.go apps/better-ccusage/internal/mcp/tools/session_test.go
 git commit -m "feat(mcp): add session tool"
 ```
 
@@ -527,8 +529,8 @@ git commit -m "feat(mcp): add session tool"
 ## Task 5: `monthly` tool
 
 **Files:**
-- Create: `apps/mcp/internal/tools/monthly.go`
-- Create: `apps/mcp/internal/tools/monthly_test.go`
+- Create: `apps/better-ccusage/internal/mcp/tools/monthly.go`
+- Create: `apps/better-ccusage/internal/mcp/tools/monthly_test.go`
 
 **Interfaces:**
 - Consumes: same seams; `commands.Monthly(ctx, commands.MonthlyOpts, io.Discard, prices) (output.DailyResult, error)`.
@@ -536,7 +538,7 @@ git commit -m "feat(mcp): add session tool"
 
 Mirror Task 3 with `GroupByMonth` behavior (mirror `apps/better-ccusage/internal/commands/monthly_test.go`: two fixture dates in the same month collapse to one row).
 
-- [ ] **Step 1: Write `apps/mcp/internal/tools/monthly.go`**
+- [ ] **Step 1: Write `apps/better-ccusage/internal/mcp/tools/monthly.go`**
 
 ```go
 package tools
@@ -548,7 +550,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/commands"
-	"github.com/cobra91/better-ccusage/apps/mcp/internal/transport"
+	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/mcp/transport"
 )
 
 // Monthly implements the MCP `monthly` tool: usage report grouped by month.
@@ -565,13 +567,13 @@ func Monthly(ctx context.Context, d Deps, args ReportArgs) (*mcp.CallToolResult,
 }
 ```
 
-- [ ] **Step 2: Write `apps/mcp/internal/tools/monthly_test.go`** (`TestMonthly_Integration` + `TestMonthly_InvalidDate` with `Since: "not-a-date"` asserting `INVALID_ARGS`).
+- [ ] **Step 2: Write `apps/better-ccusage/internal/mcp/tools/monthly_test.go`** (`TestMonthly_Integration` + `TestMonthly_InvalidDate` with `Since: "not-a-date"` asserting `INVALID_ARGS`).
 
 - [ ] **Step 3: Run tests**
 
 ```bash
-go test ./apps/mcp/internal/tools/... -race -count=1 -run 'TestMonthly'
-go vet ./apps/mcp/...
+go test ./apps/better-ccusage/internal/mcp/tools/... -race -count=1 -run 'TestMonthly'
+go vet ./apps/better-ccusage/...
 ```
 
 Expected: PASS, vet clean.
@@ -579,7 +581,7 @@ Expected: PASS, vet clean.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add apps/mcp/internal/tools/monthly.go apps/mcp/internal/tools/monthly_test.go
+git add apps/better-ccusage/internal/mcp/tools/monthly.go apps/better-ccusage/internal/mcp/tools/monthly_test.go
 git commit -m "feat(mcp): add monthly tool"
 ```
 
@@ -588,8 +590,8 @@ git commit -m "feat(mcp): add monthly tool"
 ## Task 6: `blocks` tool
 
 **Files:**
-- Create: `apps/mcp/internal/tools/blocks.go`
-- Create: `apps/mcp/internal/tools/blocks_test.go`
+- Create: `apps/better-ccusage/internal/mcp/tools/blocks.go`
+- Create: `apps/better-ccusage/internal/mcp/tools/blocks_test.go`
 
 **Interfaces:**
 - Consumes: same seams; `commands.Blocks(ctx, commands.BlocksOpts, io.Discard, prices) (output.DailyResult, error)` where `type BlocksOpts struct { CommonOpts; Active bool; Recent bool; TokenLimit int64 }`.
@@ -597,7 +599,7 @@ git commit -m "feat(mcp): add monthly tool"
 
 MCP exposes no active/recent/token-limit args (TS parity: same 3-arg schema) — construct `BlocksOpts{CommonOpts: common}` with zero values.
 
-- [ ] **Step 1: Write `apps/mcp/internal/tools/blocks.go`**
+- [ ] **Step 1: Write `apps/better-ccusage/internal/mcp/tools/blocks.go`**
 
 ```go
 package tools
@@ -609,7 +611,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/commands"
-	"github.com/cobra91/better-ccusage/apps/mcp/internal/transport"
+	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/mcp/transport"
 )
 
 // Blocks implements the MCP `blocks` tool: usage grouped by 5-hour billing blocks.
@@ -626,13 +628,13 @@ func Blocks(ctx context.Context, d Deps, args ReportArgs) (*mcp.CallToolResult, 
 }
 ```
 
-- [ ] **Step 2: Write `apps/mcp/internal/tools/blocks_test.go`** (`TestBlocks_Integration` + `TestBlocks_NoData` asserting `NO_DATA`).
+- [ ] **Step 2: Write `apps/better-ccusage/internal/mcp/tools/blocks_test.go`** (`TestBlocks_Integration` + `TestBlocks_NoData` asserting `NO_DATA`).
 
 - [ ] **Step 3: Run tests**
 
 ```bash
-go test ./apps/mcp/internal/tools/... -race -count=1 -run 'TestBlocks'
-go vet ./apps/mcp/...
+go test ./apps/better-ccusage/internal/mcp/tools/... -race -count=1 -run 'TestBlocks'
+go vet ./apps/better-ccusage/...
 ```
 
 Expected: PASS, vet clean.
@@ -640,7 +642,7 @@ Expected: PASS, vet clean.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add apps/mcp/internal/tools/blocks.go apps/mcp/internal/tools/blocks_test.go
+git add apps/better-ccusage/internal/mcp/tools/blocks.go apps/better-ccusage/internal/mcp/tools/blocks_test.go
 git commit -m "feat(mcp): add blocks tool"
 ```
 
@@ -649,8 +651,8 @@ git commit -m "feat(mcp): add blocks tool"
 ## Task 7: Server with 4 tool registrations + in-memory tests
 
 **Files:**
-- Create: `apps/mcp/internal/server/server.go`
-- Create: `apps/mcp/internal/server/server_test.go`
+- Create: `apps/better-ccusage/internal/mcp/server/server.go`
+- Create: `apps/better-ccusage/internal/mcp/server/server_test.go`
 
 **Interfaces:**
 - Consumes: `tools.Deps/Daily/Session/Monthly/Blocks`; `mcp.NewServer`, `mcp.AddTool[ReportArgs, any]`, `mcp.NewInMemoryTransports`, `mcp.NewClient`.
@@ -658,10 +660,10 @@ git commit -m "feat(mcp): add blocks tool"
 
 Server name const: `better-ccusage-mcp`. Tool descriptions (TS parity, from `apps/mcp/src/mcp.ts`): daily `Show usage report grouped by date`, session `Show usage report grouped by conversation session`, monthly `Show usage report grouped by month`, blocks `Show usage report grouped by session billing blocks`.
 
-- [ ] **Step 1: Write `apps/mcp/internal/server/server.go`**
+- [ ] **Step 1: Write `apps/better-ccusage/internal/mcp/server/server.go`**
 
 ```go
-// Package server builds the MCP server for apps/mcp and registers the
+// Package server builds the MCP server and registers the
 // usage-reporting tools.
 package server
 
@@ -671,7 +673,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/cost"
-	"github.com/cobra91/better-ccusage/apps/mcp/internal/tools"
+	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/mcp/tools"
 	"github.com/cobra91/better-ccusage/pkg/pricing"
 )
 
@@ -710,7 +712,7 @@ func NewServer(opts Opts) *mcp.Server {
 }
 ```
 
-- [ ] **Step 2: Write `apps/mcp/internal/server/server_test.go`** with two tests:
+- [ ] **Step 2: Write `apps/better-ccusage/internal/mcp/server/server_test.go`** with two tests:
   - `TestNewServer_ListsFourTools_Integration`: `NewServer(Opts{Version: "test"})`, `ct, st := mcp.NewInMemoryTransports()`, `mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "test"}, nil)`. Connect the SERVER first, then the client (SDK requires server-first: the client initializes the session during connection): `srvSess, err := srv.Connect(ctx, st, nil)` then `cliSess, err := client.Connect(ctx, ct, nil)`. `res, err := cliSess.ListTools(ctx, &mcp.ListToolsParams{})`, assert `err == nil` and tool names are exactly `[blocks daily monthly session]` (collect `res.Tools[i].Name`, sort before comparing). Close both sessions at the end.
   - `TestServer_CallDaily_Integration`: fixture dir (same shape as Task 3), `NewServer(Opts{ConfigDir: dir, DefaultMode: cost.CostAuto, Prices: nil, Version: "test"})` (same nil-prices rule as Task 3), in-memory pair (server first, then client), `session.CallTool(ctx, &mcp.CallToolParams{Name: "daily", Arguments: map[string]any{"mode": "auto"}})`, assert `err == nil`, `res.IsError == false`, one `*mcp.TextContent` with JSON containing `"daily"`. `Server.Connect` takes `(ctx, transport, *ServerSessionOptions)` — pass `nil` options.
 
@@ -719,8 +721,8 @@ For `ListTools`/`CallTool` signatures, run `go doc github.com/modelcontextprotoc
 - [ ] **Step 3: Run tests**
 
 ```bash
-go test ./apps/mcp/internal/server/... -race -count=1
-go vet ./apps/mcp/...
+go test ./apps/better-ccusage/internal/mcp/server/... -race -count=1
+go vet ./apps/better-ccusage/...
 ```
 
 Expected: PASS, vet clean.
@@ -728,7 +730,7 @@ Expected: PASS, vet clean.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add apps/mcp/internal/server/
+git add apps/better-ccusage/internal/mcp/server/
 git commit -m "feat(mcp): add server with four tools"
 ```
 
@@ -737,7 +739,7 @@ git commit -m "feat(mcp): add server with four tools"
 ## Task 8: CLI binary with stdio + HTTP transports
 
 **Files:**
-- Create: `apps/mcp/cmd/better-ccusage-mcp/main.go`
+- Create: `apps/better-ccusage/cmd/better-ccusage-mcp/main.go`
 
 **Interfaces:**
 - Consumes: `server.NewServer/Opts/Name`; `config.Load/DefaultPath/ResolveDirs`; `pricing.LoadPrices/EmbeddedPrices`; `terminal.NewLogger/NewLoggerFromEnv/Silent`; `mcp.StdioTransport`, `mcp.NewStreamableHTTPHandler`.
@@ -747,7 +749,7 @@ Flags (TS `command.ts` parity): `--mode/-m` default `auto`, `--type/-t` default 
 
 Startup: `cfg, _ := config.Load(config.DefaultPath())`; `dirs := config.ResolveDirs("", cfg)`; if `len(dirs) == 0` → return error `No valid Claude data directories found` (TS message parity). `ConfigDir: strings.Join(dirs, ",")` (commands accept comma-separated). Pricing: `pricing.LoadPrices(bytes.NewReader(pricing.EmbeddedPrices))`, warn-and-continue on error (Plan 2 root pattern). stdio: silence logger via `terminal.NewLogger(int(terminal.Silent), os.Stderr)` before `srv.Run`. HTTP: `http.ListenAndServe(":"+strconv.Itoa(port), mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{}))`.
 
-- [ ] **Step 1: Write `apps/mcp/cmd/better-ccusage-mcp/main.go`**
+- [ ] **Step 1: Write `apps/better-ccusage/cmd/better-ccusage-mcp/main.go`**
 
 ```go
 package main
@@ -764,7 +766,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/config"
-	"github.com/cobra91/better-ccusage/apps/mcp/internal/server"
+	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/mcp/server"
 	"github.com/cobra91/better-ccusage/pkg/pricing"
 	"github.com/cobra91/better-ccusage/pkg/terminal"
 )
@@ -848,8 +850,8 @@ Needs import `"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/co
 - [ ] **Step 2: Verify it builds and lists help**
 
 ```bash
-go build ./apps/mcp/cmd/better-ccusage-mcp
-go vet ./apps/mcp/...
+go build ./apps/better-ccusage/cmd/better-ccusage-mcp
+go vet ./apps/better-ccusage/...
 ./better-ccusage-mcp --help
 ```
 
@@ -858,7 +860,7 @@ Expected: build OK, vet clean, help shows `--mode/-m`, `--type/-t`, `--port/-p`.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add apps/mcp/cmd/
+git add apps/better-ccusage/cmd/
 git commit -m "feat(mcp): add MCP server binary with stdio and HTTP"
 ```
 
@@ -882,7 +884,7 @@ Expected: clean.
 go test ./... -race -count=1
 ```
 
-Expected: all packages green (Plan 2: 132 passed / 14 pkgs + new `apps/mcp/...` packages).
+Expected: all packages green (Plan 2: 132 passed / 14 pkgs + new `apps/better-ccusage/internal/mcp/...` packages).
 
 - [ ] **Step 3: Vet**
 
@@ -895,7 +897,7 @@ Expected: no diagnostics.
 - [ ] **Step 4: Binary smoke**
 
 ```bash
-go build -o /tmp/better-ccusage-mcp ./apps/mcp/cmd/better-ccusage-mcp
+go build -o /tmp/better-ccusage-mcp ./apps/better-ccusage/cmd/better-ccusage-mcp
 /tmp/better-ccusage-mcp --help
 /tmp/better-ccusage-mcp --type bogus 2>&1 | head -3
 ```
