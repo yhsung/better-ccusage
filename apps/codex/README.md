@@ -38,3 +38,11 @@ Maintaining a separate Codex CLI duplicated ~2,000 lines that `better-ccusage` a
 ## License
 
 MIT © [@cobra91](https://github.com/cobra91)
+
+## Go Binary (`better-ccusage-codex`, deprecated)
+
+```bash
+go build ./apps/codex/cmd/better-ccusage-codex
+```
+
+Forwards to `better-ccusage` (resolved via `PATH`, then the shim's own directory). Prints a stderr deprecation notice on TTY runs unless `CODEX_NO_DEPRECATION_NOTICE=1`. Sets `OFFLINE=true`; neuters `DROID_SESSIONS_DIR`/`ZCODE_HOME` when unset; inherits `CODEX_HOME`.

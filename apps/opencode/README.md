@@ -40,3 +40,11 @@ This migration also fixes a latent bug: the old standalone opencode package read
 ## License
 
 MIT © [@cobra91](https://github.com/cobra91)
+
+## Go Binary (`better-ccusage-opencode`, deprecated)
+
+```bash
+go build ./apps/opencode/cmd/better-ccusage-opencode
+```
+
+Forwards to `better-ccusage` (resolved via `PATH`, then the shim's own directory). Prints a stderr deprecation notice on TTY runs unless `OPENCODE_NO_DEPRECATION_NOTICE=1`. Sets `OFFLINE=true`; neuters `DROID_SESSIONS_DIR`/`ZCODE_HOME`/`CODEX_HOME` when unset; inherits `OPENCODE_DATA_DIR`.
