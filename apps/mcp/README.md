@@ -68,10 +68,6 @@ For full documentation, visit **[better-ccusage.com/guide/mcp-server](https://be
     </a>
 </p>
 
-## License
-
-MIT © [@cobra91](https://github.com/cobra91)
-
 ## Go Binary (`better-ccusage-mcp`)
 
 ```bash
@@ -80,4 +76,8 @@ better-ccusage-mcp --help
 better-ccusage-mcp --type http --port 8080
 ```
 
-Exposes `daily`, `session`, `monthly`, `blocks`, `codex-daily`, `codex-monthly` over MCP (stdio default, StreamableHTTP via `--type http`). Tool args: `since`/`until` (RFC3339), `mode` (`auto`|`calculate`|`display`). Errors return `isError` with `{code, message, hint}`.
+Exposes `daily`, `session`, `monthly`, `blocks`, `codex-daily`, `codex-monthly` over MCP (stdio default, StreamableHTTP via `--type http`). Tool args: `since`/`until` (RFC3339); `mode` (`auto`|`calculate`|`display`) applies to `daily`/`session`/`monthly`/`blocks` only — `codex-daily`/`codex-monthly` take `since`/`until` only. Errors return `isError` with `{code, message, hint}`.
+
+## License
+
+MIT © [@cobra91](https://github.com/cobra91)

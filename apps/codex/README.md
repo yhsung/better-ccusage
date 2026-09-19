@@ -35,10 +35,6 @@ npx @better-ccusage/codex daily --json
 
 Maintaining a separate Codex CLI duplicated ~2,000 lines that `better-ccusage` already offered (and did better). The upstream [`ccusage`](https://github.com/ryoppippi/ccusage) project had already consolidated Codex as a built-in source, and this merge aligns `better-ccusage` with that architecture. For details, see the [Codex source guide](https://better-ccusage.com/guide/codex/).
 
-## License
-
-MIT © [@cobra91](https://github.com/cobra91)
-
 ## Go Binary (`better-ccusage-codex`, deprecated)
 
 ```bash
@@ -46,3 +42,7 @@ go build ./apps/codex/cmd/better-ccusage-codex
 ```
 
 Forwards to `better-ccusage` (resolved via `PATH`, then the shim's own directory). Prints a stderr deprecation notice on TTY runs unless `CODEX_NO_DEPRECATION_NOTICE=1`. Sets `OFFLINE=true`; neuters `DROID_SESSIONS_DIR`/`ZCODE_HOME` when unset; inherits `CODEX_HOME`.
+
+## License
+
+MIT © [@cobra91](https://github.com/cobra91)
