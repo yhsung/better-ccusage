@@ -14,6 +14,8 @@ const (
 	GroupBySession
 	// GroupByBlock buckets entries into 5-hour billing blocks.
 	GroupByBlock
+	// GroupByWeek buckets entries by ISO week (e.g. "2026-W03").
+	GroupByWeek GroupKey = 4
 )
 
 // CostMode controls how ApplyPrices derives per-bucket cost.

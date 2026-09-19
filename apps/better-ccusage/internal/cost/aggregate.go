@@ -45,6 +45,9 @@ func groupKeyFor(e data.Entry, key GroupKey) string {
 		return e.SessionID
 	case GroupByBlock:
 		return blockKey(e.Timestamp)
+	case GroupByWeek:
+		yr, wk := e.Timestamp.ISOWeek()
+		return fmt.Sprintf("%04d-W%02d", yr, wk)
 	default:
 		return ""
 	}
