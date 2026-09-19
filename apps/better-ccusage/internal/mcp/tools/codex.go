@@ -47,9 +47,15 @@ func runCodexCli(ctx context.Context, bin, command string, args CodexArgs) (*mcp
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, cliArgs...)
 	cmd.Env = os.Environ()
+	var se bytes.Buffer
+	cmd.Stderr = &se
 	out, err := cmd.Output()
 	if err != nil {
-		return transport.ToolError(fmt.Errorf("codex %s: %w", command, err))
+		msg := fmt.Sprintf("codex %s: %v", command, err)
+		if se.Len() > 0 {
+			msg += ": " + string(bytes.TrimSpace(se.Bytes()[:min(se.Len(), 500)]))
+		}
+		return transport.ToolError(fmt.Errorf("%s", msg))
 	}
 	if len(bytes.TrimSpace(out)) == 0 {
 		return transport.ToolError(fmt.Errorf("codex %s returned empty output", command))

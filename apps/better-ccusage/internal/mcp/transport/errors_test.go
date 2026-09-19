@@ -20,6 +20,7 @@ func TestMapError(t *testing.T) {
 		{"unknownmodel", errs.ErrUnknownModel, "UNKNOWN_MODEL"},
 		{"invalidmode", errs.ErrInvalidMode, "INVALID_ARGS"},
 		{"invalidargs", errs.ErrInvalidArgs, "INVALID_ARGS"},
+		{"incompatiblemode", errs.ErrIncompatibleMode, "INVALID_ARGS"},
 		{"wrapped", errors.Join(errs.ErrNoData, errors.New("x")), "NO_DATA"},
 		{"default", errors.New("boom"), "INTERNAL"},
 	}

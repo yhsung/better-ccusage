@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 
 	"github.com/spf13/cobra"
 
@@ -52,8 +53,12 @@ func Statusline(ctx context.Context, opts StatuslineOpts, w io.Writer, prices *p
 	}
 	modelList := make([]string, 0, len(models))
 	for m := range models {
+		if m == "" {
+			continue
+		}
 		modelList = append(modelList, m)
 	}
+	sort.Strings(modelList)
 	out := statusline.Render(statusline.Input{TotalCost: totalCost, TotalTokens: totalTokens, Models: modelList})
 	_, err = io.WriteString(w, out+"\n")
 	return err

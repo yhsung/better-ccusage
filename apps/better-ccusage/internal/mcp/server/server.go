@@ -26,7 +26,7 @@ type Opts struct {
 	CodexBin string
 }
 
-// NewServer builds an MCP server with daily/session/monthly/blocks tools.
+// NewServer builds an MCP server with daily/session/monthly/blocks/codex-daily/codex-monthly tools.
 func NewServer(opts Opts) *mcp.Server {
 	d := tools.Deps{ConfigDir: opts.ConfigDir, DefaultMode: opts.DefaultMode, Prices: opts.Prices}
 	srv := mcp.NewServer(&mcp.Implementation{Name: Name, Version: opts.Version}, nil)

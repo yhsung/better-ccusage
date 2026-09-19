@@ -25,7 +25,7 @@ func MapError(err error) (code, message string) {
 		return "NO_DATA", err.Error()
 	case errors.Is(err, errs.ErrUnknownModel):
 		return "UNKNOWN_MODEL", err.Error()
-	case errors.Is(err, errs.ErrInvalidMode), errors.Is(err, errs.ErrInvalidArgs):
+	case errors.Is(err, errs.ErrInvalidMode), errors.Is(err, errs.ErrInvalidArgs), errors.Is(err, errs.ErrIncompatibleMode):
 		return "INVALID_ARGS", err.Error()
 	default:
 		return "INTERNAL", err.Error()

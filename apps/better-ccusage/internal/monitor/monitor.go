@@ -11,7 +11,6 @@ import (
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/cost"
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/data"
 	"github.com/cobra91/better-ccusage/pkg/pricing"
-	"github.com/cobra91/better-ccusage/pkg/terminal"
 )
 
 // Opts configures the live monitor.
@@ -24,7 +23,6 @@ type Opts struct {
 
 type model struct {
 	opts    Opts
-	log     *terminal.Logger
 	content string
 }
 
@@ -80,7 +78,7 @@ func Run(ctx context.Context, opts Opts) error {
 	if opts.RefreshInterval == 0 {
 		opts.RefreshInterval = 30 * time.Second
 	}
-	m := model{opts: opts, log: terminal.NewLoggerFromEnv()}
+	m := model{opts: opts}
 	m.refresh()
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
 	_, err := p.Run()

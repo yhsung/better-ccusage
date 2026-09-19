@@ -40,6 +40,21 @@ func TestCodexAdapter(t *testing.T) {
 	}
 }
 
+func TestCodexDetect_PrefixWithoutSession(t *testing.T) {
+	// Pins current precedence: a "codex/" prefix matches even with an
+	// empty SessionID; a bare "codex" substring needs a SessionID.
+	var a codexAdapter
+	if !a.Detect(data.Entry{Model: "codex/gpt-5"}) {
+		t.Error("Detect(codex/ prefix, empty session): got false, want true")
+	}
+	if a.Detect(data.Entry{Model: "gpt-5-codex"}) {
+		t.Error("Detect(bare codex substring, empty session): got true, want false")
+	}
+	if !a.Detect(data.Entry{Model: "gpt-5-codex", SessionID: "s1"}) {
+		t.Error("Detect(bare codex substring, with session): got false, want true")
+	}
+}
+
 func TestOpencodeAdapter(t *testing.T) {
 	m := NewManager()
 	out := m.Normalize([]data.Entry{mkE("opencode/claude-sonnet-4-5-20250929")})
