@@ -103,6 +103,22 @@ func TestNewDailyCmd_JSON(t *testing.T) {
 	}
 }
 
+func TestNewDailyCmd_JQ(t *testing.T) {
+	isolateHome(t)
+	dir := setupDailyFixture(t)
+	cmd, _ := NewDailyCmd(testPriceTable(t))
+	var buf strings.Builder
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--json", "--jq", ".daily | length", "--config-dir", dir, "--mode", "calculate"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got := strings.TrimSpace(buf.String()); got != "2" {
+		t.Errorf("expected jq-filtered output %q, got %q", "2", got)
+	}
+}
+
 func TestNewDailyCmd_Table(t *testing.T) {
 	isolateHome(t)
 	dir := setupDailyFixture(t)

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/cost"
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/data"
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/errs"
+	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/jq"
 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/output"
 	"github.com/cobra91/better-ccusage/pkg/pricing"
 	"github.com/cobra91/better-ccusage/pkg/terminal"
@@ -63,14 +65,29 @@ func NewDailyCmd(prices *pricing.PriceTable) (*cobra.Command, *DailyOpts) {
 		Short: "Show daily usage report",
 	}
 	common := BindCommonFlags(cmd)
+	var jqExpr string
+	cmd.Flags().StringVar(&jqExpr, "jq", "", "post-process JSON output with a jq expression")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		opts.CommonOpts = *common
 		result, err := Daily(cmd.Context(), *opts, cmd.OutOrStdout(), prices)
 		if err != nil {
 			return err
 		}
-		if opts.JSON {
-			return output.EncodeJSON(cmd.OutOrStdout(), result)
+		if opts.JSON || jqExpr != "" {
+			var buf bytes.Buffer
+			if err := output.EncodeJSON(&buf, result); err != nil {
+				return err
+			}
+			out := buf.Bytes()
+			if jqExpr != "" {
+				filtered, err := jq.Process(jqExpr, out)
+				if err != nil {
+					return err
+				}
+				out = filtered
+			}
+			_, err = cmd.OutOrStdout().Write(ensureTrailingNewline(out))
+			return err
 		}
 		// Render as table
 		cols := []terminal.Column{
@@ -89,4 +106,13 @@ func NewDailyCmd(prices *pricing.PriceTable) (*cobra.Command, *DailyOpts) {
 		return tbl.Render()
 	}
 	return cmd, opts
+}
+
+// ensureTrailingNewline appends a newline if out doesn't end with one.
+// EncodeJSON output already ends with "\n"; jq.Process output does not.
+func ensureTrailingNewline(out []byte) []byte {
+	if len(out) == 0 || out[len(out)-1] == '\n' {
+		return out
+	}
+	return append(out, '\n')
 }
