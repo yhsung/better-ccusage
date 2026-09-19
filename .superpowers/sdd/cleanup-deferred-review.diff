@@ -1,0 +1,688 @@
+diff --git a/apps/better-ccusage/internal/adapters/adapters_test.go b/apps/better-ccusage/internal/adapters/adapters_test.go
+index 17e698d..5d6e6bf 100644
+--- a/apps/better-ccusage/internal/adapters/adapters_test.go
++++ b/apps/better-ccusage/internal/adapters/adapters_test.go
+@@ -33,17 +33,32 @@ func TestManager_EmptyEntries(t *testing.T) {
+ }
+ 
+ func TestCodexAdapter(t *testing.T) {
+ 	m := NewManager()
+ 	out := m.Normalize([]data.Entry{mkE("codex/kimi-for-coding")})
+ 	if out[0].Model != "kimi-for-coding" {
+ 		t.Errorf("expected stripped model, got %q", out[0].Model)
+ 	}
+ }
+ 
++func TestCodexDetect_PrefixWithoutSession(t *testing.T) {
++	// Pins current precedence: a "codex/" prefix matches even with an
++	// empty SessionID; a bare "codex" substring needs a SessionID.
++	var a codexAdapter
++	if !a.Detect(data.Entry{Model: "codex/gpt-5"}) {
++		t.Error("Detect(codex/ prefix, empty session): got false, want true")
++	}
++	if a.Detect(data.Entry{Model: "gpt-5-codex"}) {
++		t.Error("Detect(bare codex substring, empty session): got true, want false")
++	}
++	if !a.Detect(data.Entry{Model: "gpt-5-codex", SessionID: "s1"}) {
++		t.Error("Detect(bare codex substring, with session): got false, want true")
++	}
++}
++
+ func TestOpencodeAdapter(t *testing.T) {
+ 	m := NewManager()
+ 	out := m.Normalize([]data.Entry{mkE("opencode/claude-sonnet-4-5-20250929")})
+ 	if out[0].Model != "claude-sonnet-4-5-20250929" {
+ 		t.Errorf("expected stripped model, got %q", out[0].Model)
+ 	}
+ }
+\ No newline at end of file
+diff --git a/apps/better-ccusage/internal/adapters/codex.go b/apps/better-ccusage/internal/adapters/codex.go
+index 98a13e5..ab4977f 100644
+--- a/apps/better-ccusage/internal/adapters/codex.go
++++ b/apps/better-ccusage/internal/adapters/codex.go
+@@ -3,16 +3,16 @@ package adapters
+ import (
+ 	"strings"
+ 
+ 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/data"
+ )
+ 
+ type codexAdapter struct{}
+ 
+ func (codexAdapter) Name() string { return "codex" }
+ func (codexAdapter) Detect(e data.Entry) bool {
+-	return strings.HasPrefix(e.Model, "codex/") || e.SessionID != "" && strings.Contains(e.Model, "codex")
++	return strings.HasPrefix(e.Model, "codex/") || (e.SessionID != "" && strings.Contains(e.Model, "codex"))
+ }
+ func (codexAdapter) Adapt(e data.Entry) (data.Entry, bool) {
+ 	e.Model = strings.TrimPrefix(e.Model, "codex/")
+ 	return e, true
+ }
+diff --git a/apps/better-ccusage/internal/commands/common_test.go b/apps/better-ccusage/internal/commands/common_test.go
+index da28b9f..147cc3a 100644
+--- a/apps/better-ccusage/internal/commands/common_test.go
++++ b/apps/better-ccusage/internal/commands/common_test.go
+@@ -110,10 +110,21 @@ func TestBindCommonFlags_PreRunEChainsExisting(t *testing.T) {
+ func TestBindCommonFlags_InvalidSince(t *testing.T) {
+ 	cmd := &cobra.Command{Use: "test"}
+ 	BindCommonFlags(cmd)
+ 	if err := cmd.ParseFlags([]string{"--since", "not-a-time"}); err != nil {
+ 		t.Fatal(err)
+ 	}
+ 	if err := cmd.PreRunE(cmd, nil); err == nil {
+ 		t.Error("PreRunE(--since not-a-time): got nil, want error")
+ 	}
+ }
++
++func TestBindCommonFlags_InvalidUntil(t *testing.T) {
++	cmd := &cobra.Command{Use: "test"}
++	BindCommonFlags(cmd)
++	if err := cmd.ParseFlags([]string{"--until", "not-a-time"}); err != nil {
++		t.Fatal(err)
++	}
++	if err := cmd.PreRunE(cmd, nil); err == nil {
++		t.Error("PreRunE(--until not-a-time): got nil, want error")
++	}
++}
+diff --git a/apps/better-ccusage/internal/commands/daily_test.go b/apps/better-ccusage/internal/commands/daily_test.go
+index 0247443..7e144fc 100644
+--- a/apps/better-ccusage/internal/commands/daily_test.go
++++ b/apps/better-ccusage/internal/commands/daily_test.go
+@@ -112,20 +112,49 @@ func TestNewDailyCmd_JQ(t *testing.T) {
+ 	cmd.SetErr(&buf)
+ 	cmd.SetArgs([]string{"--json", "--jq", ".daily | length", "--config-dir", dir, "--mode", "calculate"})
+ 	if err := cmd.Execute(); err != nil {
+ 		t.Fatalf("Execute: %v", err)
+ 	}
+ 	if got := strings.TrimSpace(buf.String()); got != "2" {
+ 		t.Errorf("expected jq-filtered output %q, got %q", "2", got)
+ 	}
+ }
+ 
++func TestNewDailyCmd_JQAlone(t *testing.T) {
++	isolateHome(t)
++	dir := setupDailyFixture(t)
++	cmd, _ := NewDailyCmd(testPriceTable(t))
++	var buf strings.Builder
++	cmd.SetOut(&buf)
++	cmd.SetErr(&buf)
++	cmd.SetArgs([]string{"--jq", ".daily | length", "--config-dir", dir, "--mode", "calculate"})
++	if err := cmd.Execute(); err != nil {
++		t.Fatalf("Execute: %v", err)
++	}
++	if got := strings.TrimSpace(buf.String()); got != "2" {
++		t.Errorf("expected jq-alone filtered output %q, got %q", "2", got)
++	}
++}
++
++func TestNewDailyCmd_BadJQ(t *testing.T) {
++	isolateHome(t)
++	dir := setupDailyFixture(t)
++	cmd, _ := NewDailyCmd(testPriceTable(t))
++	var buf strings.Builder
++	cmd.SetOut(&buf)
++	cmd.SetErr(&buf)
++	cmd.SetArgs([]string{"--jq", ".daily | | |", "--config-dir", dir, "--mode", "calculate"})
++	if err := cmd.Execute(); err == nil {
++		t.Fatal("Execute(--jq bad expr): got nil, want error")
++	}
++}
++
+ func TestNewDailyCmd_Table(t *testing.T) {
+ 	isolateHome(t)
+ 	dir := setupDailyFixture(t)
+ 	cmd, _ := NewDailyCmd(testPriceTable(t))
+ 	var buf strings.Builder
+ 	cmd.SetOut(&buf)
+ 	cmd.SetArgs([]string{"--config-dir", dir, "--mode", "calculate"})
+ 	if err := cmd.Execute(); err != nil {
+ 		t.Fatalf("Execute: %v", err)
+ 	}
+diff --git a/apps/better-ccusage/internal/commands/statusline.go b/apps/better-ccusage/internal/commands/statusline.go
+index 5928552..72b09ea 100644
+--- a/apps/better-ccusage/internal/commands/statusline.go
++++ b/apps/better-ccusage/internal/commands/statusline.go
+@@ -1,17 +1,18 @@
+ package commands
+ 
+ import (
+ 	"context"
+ 	"fmt"
+ 	"io"
+ 	"os"
++	"sort"
+ 
+ 	"github.com/spf13/cobra"
+ 
+ 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/adapters"
+ 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/config"
+ 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/cost"
+ 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/data"
+ 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/errs"
+ 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/statusline"
+ 	"github.com/cobra91/better-ccusage/pkg/pricing"
+@@ -45,22 +46,26 @@ func Statusline(ctx context.Context, opts StatuslineOpts, w io.Writer, prices *p
+ 	var totalCost pricing.Money
+ 	var totalTokens int64
+ 	models := map[string]bool{}
+ 	for _, b := range buckets {
+ 		totalCost = totalCost.Add(b.Cost)
+ 		totalTokens += b.InputTokens + b.OutputTokens + b.CacheCreationTokens + b.CacheReadTokens
+ 		models[b.Model] = true
+ 	}
+ 	modelList := make([]string, 0, len(models))
+ 	for m := range models {
++		if m == "" {
++			continue
++		}
+ 		modelList = append(modelList, m)
+ 	}
++	sort.Strings(modelList)
+ 	out := statusline.Render(statusline.Input{TotalCost: totalCost, TotalTokens: totalTokens, Models: modelList})
+ 	_, err = io.WriteString(w, out+"\n")
+ 	return err
+ }
+ 
+ // NewStatuslineCmd returns the cobra command for `better-ccusage statusline`
+ // along with its bound opts.
+ //
+ // BindCommonFlags is called at construction time (not inside RunE) so
+ // flags are registered before parsing and PreRunE (since/until parsing)
+diff --git a/apps/better-ccusage/internal/mcp/server/server.go b/apps/better-ccusage/internal/mcp/server/server.go
+index 11db037..555b8f3 100644
+--- a/apps/better-ccusage/internal/mcp/server/server.go
++++ b/apps/better-ccusage/internal/mcp/server/server.go
+@@ -19,21 +19,21 @@ const Name = "better-ccusage-mcp"
+ // Opts configures the MCP server.
+ type Opts struct {
+ 	ConfigDir   string
+ 	DefaultMode cost.CostMode
+ 	Prices      *pricing.PriceTable
+ 	Version     string
+ 	// CodexBin overrides the codex shim path; empty resolves better-ccusage-codex lazily per call.
+ 	CodexBin string
+ }
+ 
+-// NewServer builds an MCP server with daily/session/monthly/blocks tools.
++// NewServer builds an MCP server with daily/session/monthly/blocks/codex-daily/codex-monthly tools.
+ func NewServer(opts Opts) *mcp.Server {
+ 	d := tools.Deps{ConfigDir: opts.ConfigDir, DefaultMode: opts.DefaultMode, Prices: opts.Prices}
+ 	srv := mcp.NewServer(&mcp.Implementation{Name: Name, Version: opts.Version}, nil)
+ 	mcp.AddTool[tools.ReportArgs, any](srv, &mcp.Tool{Name: "daily", Description: "Show usage report grouped by date"},
+ 		func(ctx context.Context, req *mcp.CallToolRequest, args tools.ReportArgs) (*mcp.CallToolResult, any, error) {
+ 			return tools.Daily(ctx, d, args)
+ 		})
+ 	mcp.AddTool[tools.ReportArgs, any](srv, &mcp.Tool{Name: "session", Description: "Show usage report grouped by conversation session"},
+ 		func(ctx context.Context, req *mcp.CallToolRequest, args tools.ReportArgs) (*mcp.CallToolResult, any, error) {
+ 			return tools.Session(ctx, d, args)
+diff --git a/apps/better-ccusage/internal/mcp/server/server_test.go b/apps/better-ccusage/internal/mcp/server/server_test.go
+index 785d5e1..fc7d216 100644
+--- a/apps/better-ccusage/internal/mcp/server/server_test.go
++++ b/apps/better-ccusage/internal/mcp/server/server_test.go
+@@ -120,10 +120,60 @@ func TestServer_CallCodexDaily_Integration(t *testing.T) {
+ 		t.Fatal("CallTool: empty content")
+ 	}
+ 	tc, ok := res.Content[0].(*mcp.TextContent)
+ 	if !ok {
+ 		t.Fatalf("CallTool: content[0] is %T, want *mcp.TextContent", res.Content[0])
+ 	}
+ 	if !strings.Contains(tc.Text, `"daily"`) {
+ 		t.Errorf("CallTool: expected JSON with daily key, got: %q", tc.Text)
+ 	}
+ }
++
++func TestServer_CallMonthlySessionBlocks_Integration(t *testing.T) {
++	t.Setenv("HOME", t.TempDir())
++	dir := t.TempDir()
++	project := filepath.Join(dir, "projects", "p")
++	if err := os.MkdirAll(project, 0o755); err != nil {
++		t.Fatal(err)
++	}
++	jsonl := `{"timestamp":"2026-01-15T10:00:00Z","sessionId":"s1","model":"claude-sonnet-4-5-20250929","inputTokens":1000,"outputTokens":500}
++`
++	if err := os.WriteFile(filepath.Join(project, "session1.jsonl"), []byte(jsonl), 0o644); err != nil {
++		t.Fatal(err)
++	}
++	t.Setenv("CLAUDE_CONFIG_DIR", dir)
++	ctx := context.Background()
++	srv := NewServer(Opts{ConfigDir: dir, DefaultMode: cost.CostAuto, Prices: nil, Version: "test"})
++	ct, st := mcp.NewInMemoryTransports()
++	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "test"}, nil)
++	srvSess, err := srv.Connect(ctx, st, nil)
++	if err != nil {
++		t.Fatalf("server Connect: %v", err)
++	}
++	defer srvSess.Close()
++	cliSess, err := client.Connect(ctx, ct, nil)
++	if err != nil {
++		t.Fatalf("client Connect: %v", err)
++	}
++	defer cliSess.Close()
++	for _, name := range []string{"monthly", "session", "blocks"} {
++		t.Run(name, func(t *testing.T) {
++			res, err := cliSess.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: map[string]any{"mode": "auto"}})
++			if err != nil {
++				t.Fatalf("CallTool(%s): %v", name, err)
++			}
++			if res.IsError {
++				t.Fatalf("CallTool(%s): unexpected IsError result: %+v", name, res.Content)
++			}
++			if len(res.Content) == 0 {
++				t.Fatalf("CallTool(%s): empty content", name)
++			}
++			tc, ok := res.Content[0].(*mcp.TextContent)
++			if !ok {
++				t.Fatalf("CallTool(%s): content[0] is %T, want *mcp.TextContent", name, res.Content[0])
++			}
++			if !strings.Contains(tc.Text, `"daily"`) {
++				t.Errorf("CallTool(%s): expected JSON with daily key, got: %q", name, tc.Text)
++			}
++		})
++	}
++}
+diff --git a/apps/better-ccusage/internal/mcp/tools/blocks_test.go b/apps/better-ccusage/internal/mcp/tools/blocks_test.go
+index 8b536a8..7293df2 100644
+--- a/apps/better-ccusage/internal/mcp/tools/blocks_test.go
++++ b/apps/better-ccusage/internal/mcp/tools/blocks_test.go
+@@ -1,14 +1,15 @@
+ package tools
+ 
+ import (
+ 	"context"
++	"encoding/json"
+ 	"os"
+ 	"path/filepath"
+ 	"strings"
+ 	"testing"
+ 
+ 	"github.com/modelcontextprotocol/go-sdk/mcp"
+ 
+ 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/cost"
+ )
+ 
+@@ -42,20 +43,29 @@ func TestBlocks_Integration(t *testing.T) {
+ 	if len(res.Content) == 0 {
+ 		t.Fatal("Blocks: empty content")
+ 	}
+ 	tc, ok := res.Content[0].(*mcp.TextContent)
+ 	if !ok {
+ 		t.Fatalf("Blocks: content[0] is %T, want *mcp.TextContent", res.Content[0])
+ 	}
+ 	if !strings.Contains(tc.Text, `"daily"`) {
+ 		t.Errorf("Blocks: expected JSON with daily key, got: %q", tc.Text)
+ 	}
++	var decoded struct {
++		Daily []json.RawMessage `json:"daily"`
++	}
++	if err := json.Unmarshal([]byte(tc.Text), &decoded); err != nil {
++		t.Fatalf("Blocks: invalid JSON: %v", err)
++	}
++	if len(decoded.Daily) != 1 {
++		t.Errorf("Blocks: expected 1 block row, got %d", len(decoded.Daily))
++	}
+ }
+ 
+ func TestBlocks_NoData(t *testing.T) {
+ 	t.Setenv("HOME", t.TempDir())
+ 	dir := t.TempDir() // no projects/ fixture inside
+ 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+ 	d := Deps{ConfigDir: dir, DefaultMode: cost.CostAuto, Prices: nil}
+ 	res, _, err := Blocks(context.Background(), d, ReportArgs{})
+ 	if err != nil {
+ 		t.Fatalf("Blocks: %v", err)
+@@ -67,10 +77,32 @@ func TestBlocks_NoData(t *testing.T) {
+ 		t.Fatal("Blocks: empty content")
+ 	}
+ 	tc, ok := res.Content[0].(*mcp.TextContent)
+ 	if !ok {
+ 		t.Fatalf("Blocks: content[0] is %T, want *mcp.TextContent", res.Content[0])
+ 	}
+ 	if !strings.Contains(tc.Text, "NO_DATA") {
+ 		t.Errorf("Blocks: expected NO_DATA, got: %q", tc.Text)
+ 	}
+ }
++
++func TestBlocks_InvalidMode(t *testing.T) {
++	t.Setenv("HOME", t.TempDir())
++	d := Deps{ConfigDir: t.TempDir(), DefaultMode: cost.CostAuto, Prices: nil}
++	res, _, err := Blocks(context.Background(), d, ReportArgs{Mode: "bogus"})
++	if err != nil {
++		t.Fatalf("Blocks: %v", err)
++	}
++	if !res.IsError {
++		t.Fatal("Blocks: expected IsError for bogus mode")
++	}
++	if len(res.Content) == 0 {
++		t.Fatal("Blocks: empty content")
++	}
++	tc, ok := res.Content[0].(*mcp.TextContent)
++	if !ok {
++		t.Fatalf("Blocks: content[0] is %T, want *mcp.TextContent", res.Content[0])
++	}
++	if !strings.Contains(tc.Text, "INVALID_ARGS") {
++		t.Errorf("Blocks: expected INVALID_ARGS, got: %q", tc.Text)
++	}
++}
+diff --git a/apps/better-ccusage/internal/mcp/tools/codex.go b/apps/better-ccusage/internal/mcp/tools/codex.go
+index 60b66e3..c6a07df 100644
+--- a/apps/better-ccusage/internal/mcp/tools/codex.go
++++ b/apps/better-ccusage/internal/mcp/tools/codex.go
+@@ -40,23 +40,29 @@ func runCodexCli(ctx context.Context, bin, command string, args CodexArgs) (*mcp
+ 	if args.Since != "" {
+ 		cliArgs = append(cliArgs, "--since", args.Since)
+ 	}
+ 	if args.Until != "" {
+ 		cliArgs = append(cliArgs, "--until", args.Until)
+ 	}
+ 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+ 	defer cancel()
+ 	cmd := exec.CommandContext(ctx, bin, cliArgs...)
+ 	cmd.Env = os.Environ()
++	var se bytes.Buffer
++	cmd.Stderr = &se
+ 	out, err := cmd.Output()
+ 	if err != nil {
+-		return transport.ToolError(fmt.Errorf("codex %s: %w", command, err))
++		msg := fmt.Sprintf("codex %s: %v", command, err)
++		if se.Len() > 0 {
++			msg += ": " + string(bytes.TrimSpace(se.Bytes()[:min(se.Len(), 500)]))
++		}
++		return transport.ToolError(fmt.Errorf("%s", msg))
+ 	}
+ 	if len(bytes.TrimSpace(out)) == 0 {
+ 		return transport.ToolError(fmt.Errorf("codex %s returned empty output", command))
+ 	}
+ 	if !json.Valid(out) {
+ 		return transport.ToolError(fmt.Errorf("codex %s returned invalid JSON", command))
+ 	}
+ 	return &mcp.CallToolResult{
+ 		Content: []mcp.Content{&mcp.TextContent{Text: string(out)}},
+ 	}, nil, nil
+diff --git a/apps/better-ccusage/internal/mcp/tools/codex_test.go b/apps/better-ccusage/internal/mcp/tools/codex_test.go
+index 7d7e669..92aa602 100644
+--- a/apps/better-ccusage/internal/mcp/tools/codex_test.go
++++ b/apps/better-ccusage/internal/mcp/tools/codex_test.go
+@@ -66,10 +66,28 @@ func TestCodexDaily_MissingBin(t *testing.T) {
+ 	if err != nil {
+ 		t.Fatalf("CodexDaily: %v", err)
+ 	}
+ 	if !res.IsError {
+ 		t.Fatal("expected IsError result")
+ 	}
+ 	if !strings.Contains(codexText(t, res), "better-ccusage-codex") {
+ 		t.Fatalf("expected shim name in error, got: %+v", res.Content)
+ 	}
+ }
++
++func TestCodexMonthly_Success(t *testing.T) {
++	bin := writeFakeCodexScript(t, `echo '{"monthly":[],"summary":{"totalTokens":0,"costUSD":0}}'`)
++	res, _, err := CodexMonthly(context.Background(), bin, CodexArgs{})
++	if err != nil {
++		t.Fatalf("CodexMonthly: %v", err)
++	}
++	if res.IsError {
++		t.Fatalf("CodexMonthly: unexpected IsError: %+v", res.Content)
++	}
++	var decoded map[string]any
++	if err := json.Unmarshal([]byte(codexText(t, res)), &decoded); err != nil {
++		t.Fatalf("invalid JSON: %v", err)
++	}
++	if _, ok := decoded["monthly"]; !ok {
++		t.Fatalf("expected monthly key, got: %v", decoded)
++	}
++}
+diff --git a/apps/better-ccusage/internal/mcp/tools/encode_test.go b/apps/better-ccusage/internal/mcp/tools/encode_test.go
+new file mode 100644
+index 0000000..47b1075
+--- /dev/null
++++ b/apps/better-ccusage/internal/mcp/tools/encode_test.go
+@@ -0,0 +1,46 @@
++package tools
++
++import (
++	"encoding/json"
++	"strings"
++	"testing"
++
++	"github.com/modelcontextprotocol/go-sdk/mcp"
++)
++
++func TestEncodeResult_Success(t *testing.T) {
++	res, _, err := EncodeResult(map[string]any{"daily": []any{map[string]any{"date": "2026-01-15"}}})
++	if err != nil {
++		t.Fatalf("EncodeResult: %v", err)
++	}
++	if res.IsError {
++		t.Fatal("EncodeResult: unexpected IsError result")
++	}
++	if len(res.Content) != 1 {
++		t.Fatalf("EncodeResult: content length = %d, want 1", len(res.Content))
++	}
++	tc, ok := res.Content[0].(*mcp.TextContent)
++	if !ok {
++		t.Fatalf("EncodeResult: content[0] is %T, want *mcp.TextContent", res.Content[0])
++	}
++	if !strings.Contains(tc.Text, "\n  ") {
++		t.Errorf("EncodeResult: expected 2-space indented JSON, got: %q", tc.Text)
++	}
++	var decoded map[string]any
++	if err := json.Unmarshal([]byte(tc.Text), &decoded); err != nil {
++		t.Fatalf("EncodeResult: invalid JSON: %v", err)
++	}
++	if _, ok := decoded["daily"]; !ok {
++		t.Errorf("EncodeResult: expected daily key, got: %v", decoded)
++	}
++}
++
++func TestEncodeResult_Unmarshallable(t *testing.T) {
++	res, _, err := EncodeResult(map[string]any{"bad": func() {}})
++	if err != nil {
++		t.Fatalf("EncodeResult: %v", err)
++	}
++	if !res.IsError {
++		t.Fatal("EncodeResult: expected IsError for unmarshallable value")
++	}
++}
+diff --git a/apps/better-ccusage/internal/mcp/transport/errors.go b/apps/better-ccusage/internal/mcp/transport/errors.go
+index ae4f5da..783e827 100644
+--- a/apps/better-ccusage/internal/mcp/transport/errors.go
++++ b/apps/better-ccusage/internal/mcp/transport/errors.go
+@@ -18,21 +18,21 @@ type ErrorPayload struct {
+ 	Hint    string `json:"hint"`
+ }
+ 
+ // MapError maps a sentinel error to an (MCP code, message) pair.
+ func MapError(err error) (code, message string) {
+ 	switch {
+ 	case errors.Is(err, errs.ErrNoData):
+ 		return "NO_DATA", err.Error()
+ 	case errors.Is(err, errs.ErrUnknownModel):
+ 		return "UNKNOWN_MODEL", err.Error()
+-	case errors.Is(err, errs.ErrInvalidMode), errors.Is(err, errs.ErrInvalidArgs):
++	case errors.Is(err, errs.ErrInvalidMode), errors.Is(err, errs.ErrInvalidArgs), errors.Is(err, errs.ErrIncompatibleMode):
+ 		return "INVALID_ARGS", err.Error()
+ 	default:
+ 		return "INTERNAL", err.Error()
+ 	}
+ }
+ 
+ // HintFor returns the remediation hint for an MCP error code.
+ func HintFor(code string) string {
+ 	switch code {
+ 	case "NO_DATA":
+diff --git a/apps/better-ccusage/internal/mcp/transport/errors_test.go b/apps/better-ccusage/internal/mcp/transport/errors_test.go
+index 1e720de..98ac895 100644
+--- a/apps/better-ccusage/internal/mcp/transport/errors_test.go
++++ b/apps/better-ccusage/internal/mcp/transport/errors_test.go
+@@ -13,20 +13,21 @@ import (
+ func TestMapError(t *testing.T) {
+ 	cases := []struct {
+ 		name string
+ 		err  error
+ 		code string
+ 	}{
+ 		{"nodata", errs.ErrNoData, "NO_DATA"},
+ 		{"unknownmodel", errs.ErrUnknownModel, "UNKNOWN_MODEL"},
+ 		{"invalidmode", errs.ErrInvalidMode, "INVALID_ARGS"},
+ 		{"invalidargs", errs.ErrInvalidArgs, "INVALID_ARGS"},
++		{"incompatiblemode", errs.ErrIncompatibleMode, "INVALID_ARGS"},
+ 		{"wrapped", errors.Join(errs.ErrNoData, errors.New("x")), "NO_DATA"},
+ 		{"default", errors.New("boom"), "INTERNAL"},
+ 	}
+ 	for _, tc := range cases {
+ 		t.Run(tc.name, func(t *testing.T) {
+ 			code, msg := MapError(tc.err)
+ 			if code != tc.code {
+ 				t.Errorf("code: got %q, want %q", code, tc.code)
+ 			}
+ 			if msg == "" {
+diff --git a/apps/better-ccusage/internal/monitor/monitor.go b/apps/better-ccusage/internal/monitor/monitor.go
+index 51469b1..97fe0bc 100644
+--- a/apps/better-ccusage/internal/monitor/monitor.go
++++ b/apps/better-ccusage/internal/monitor/monitor.go
+@@ -4,34 +4,32 @@ import (
+ 	"context"
+ 	"fmt"
+ 	"time"
+ 
+ 	tea "github.com/charmbracelet/bubbletea"
+ 
+ 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/adapters"
+ 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/cost"
+ 	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/data"
+ 	"github.com/cobra91/better-ccusage/pkg/pricing"
+-	"github.com/cobra91/better-ccusage/pkg/terminal"
+ )
+ 
+ // Opts configures the live monitor.
+ type Opts struct {
+ 	Loader          *data.Loader
+ 	Prices          *pricing.PriceTable
+ 	Mode            cost.CostMode
+ 	RefreshInterval time.Duration
+ }
+ 
+ type model struct {
+ 	opts    Opts
+-	log     *terminal.Logger
+ 	content string
+ }
+ 
+ type tickMsg time.Time
+ 
+ func tickCmd(d time.Duration) tea.Cmd {
+ 	return tea.Tick(d, func(t time.Time) tea.Msg { return tickMsg(t) })
+ }
+ 
+ func (m model) Init() tea.Cmd { return tickCmd(m.opts.RefreshInterval) }
+@@ -73,16 +71,16 @@ func renderBlocks(buckets []cost.Bucket) string {
+ 
+ func (m model) View() string {
+ 	return m.content + "\n(press q to quit)\n"
+ }
+ 
+ // Run starts the live monitor with the given options.
+ func Run(ctx context.Context, opts Opts) error {
+ 	if opts.RefreshInterval == 0 {
+ 		opts.RefreshInterval = 30 * time.Second
+ 	}
+-	m := model{opts: opts, log: terminal.NewLoggerFromEnv()}
++	m := model{opts: opts}
+ 	m.refresh()
+ 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
+ 	_, err := p.Run()
+ 	return err
+ }
+diff --git a/apps/codex/README.md b/apps/codex/README.md
+index 802aa32..75e1cad 100644
+--- a/apps/codex/README.md
++++ b/apps/codex/README.md
+@@ -28,21 +28,21 @@ This package still works: every invocation is forwarded to `better-ccusage` with
+ 
+ ```bash
+ # Still works — forwarded transparently
+ npx @better-ccusage/codex daily --json
+ ```
+ 
+ ## Why the merge?
+ 
+ Maintaining a separate Codex CLI duplicated ~2,000 lines that `better-ccusage` already offered (and did better). The upstream [`ccusage`](https://github.com/ryoppippi/ccusage) project had already consolidated Codex as a built-in source, and this merge aligns `better-ccusage` with that architecture. For details, see the [Codex source guide](https://better-ccusage.com/guide/codex/).
+ 
+-## License
+-
+-MIT © [@cobra91](https://github.com/cobra91)
+-
+ ## Go Binary (`better-ccusage-codex`, deprecated)
+ 
+ ```bash
+ go build ./apps/codex/cmd/better-ccusage-codex
+ ```
+ 
+ Forwards to `better-ccusage` (resolved via `PATH`, then the shim's own directory). Prints a stderr deprecation notice on TTY runs unless `CODEX_NO_DEPRECATION_NOTICE=1`. Sets `OFFLINE=true`; neuters `DROID_SESSIONS_DIR`/`ZCODE_HOME` when unset; inherits `CODEX_HOME`.
++
++## License
++
++MIT © [@cobra91](https://github.com/cobra91)
+diff --git a/apps/mcp/README.md b/apps/mcp/README.md
+index 3aa5012..e2be206 100644
+--- a/apps/mcp/README.md
++++ b/apps/mcp/README.md
+@@ -61,23 +61,23 @@ For full documentation, visit **[better-ccusage.com/guide/mcp-server](https://be
+ ## Sponsors
+ 
+ ### Featured Sponsor
+ 
+ <p align="center">
+     <a href="https://github.com/sponsors/cobra91">
+         Cobra91
+     </a>
+ </p>
+ 
+-## License
+-
+-MIT © [@cobra91](https://github.com/cobra91)
+-
+ ## Go Binary (`better-ccusage-mcp`)
+ 
+ ```bash
+ go build ./apps/better-ccusage/cmd/better-ccusage-mcp
+ better-ccusage-mcp --help
+ better-ccusage-mcp --type http --port 8080
+ ```
+ 
+-Exposes `daily`, `session`, `monthly`, `blocks`, `codex-daily`, `codex-monthly` over MCP (stdio default, StreamableHTTP via `--type http`). Tool args: `since`/`until` (RFC3339), `mode` (`auto`|`calculate`|`display`). Errors return `isError` with `{code, message, hint}`.
++Exposes `daily`, `session`, `monthly`, `blocks`, `codex-daily`, `codex-monthly` over MCP (stdio default, StreamableHTTP via `--type http`). Tool args: `since`/`until` (RFC3339); `mode` (`auto`|`calculate`|`display`) applies to `daily`/`session`/`monthly`/`blocks` only — `codex-daily`/`codex-monthly` take `since`/`until` only. Errors return `isError` with `{code, message, hint}`.
++
++## License
++
++MIT © [@cobra91](https://github.com/cobra91)
+diff --git a/apps/opencode/README.md b/apps/opencode/README.md
+index e918a44..3d724c9 100644
+--- a/apps/opencode/README.md
++++ b/apps/opencode/README.md
+@@ -30,21 +30,21 @@ This package still works: every invocation is forwarded to `better-ccusage` with
+ # Still works — forwarded transparently
+ npx @better-ccusage/opencode daily --json
+ ```
+ 
+ ## Why the merge?
+ 
+ Maintaining a separate OpenCode CLI duplicated code that `better-ccusage` already offered (and did better). The upstream [`ccusage`](https://github.com/ccusage/ccusage) project had already consolidated OpenCode as a built-in source, and this merge aligns `better-ccusage` with that architecture.
+ 
+ This migration also fixes a latent bug: the old standalone opencode package read `msg_*.json` files that modern OpenCode no longer writes (it now uses a SQLite database, `opencode.db`). As a result the old package showed **zero data** for any recent OpenCode install. The new built-in source reads the SQLite database directly.
+ 
+-## License
+-
+-MIT © [@cobra91](https://github.com/cobra91)
+-
+ ## Go Binary (`better-ccusage-opencode`, deprecated)
+ 
+ ```bash
+ go build ./apps/opencode/cmd/better-ccusage-opencode
+ ```
+ 
+ Forwards to `better-ccusage` (resolved via `PATH`, then the shim's own directory). Prints a stderr deprecation notice on TTY runs unless `OPENCODE_NO_DEPRECATION_NOTICE=1`. Sets `OFFLINE=true`; neuters `DROID_SESSIONS_DIR`/`ZCODE_HOME`/`CODEX_HOME` when unset; inherits `OPENCODE_DATA_DIR`.
++
++## License
++
++MIT © [@cobra91](https://github.com/cobra91)
