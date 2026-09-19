@@ -28,7 +28,7 @@ func Load(path string) (*Config, error) {
 	}
 	var c Config
 	if err := json.Unmarshal(data, &c); err != nil {
-		return nil, fmt.Errorf("%w: %v", errs.ErrConfigNotFound, err)
+		return nil, fmt.Errorf("%w: %v", errs.ErrInvalidJSON, err)
 	}
 	return &c, nil
 }

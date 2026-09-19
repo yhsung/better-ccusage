@@ -30,6 +30,10 @@ type Summary struct {
 func BucketsToDailyRows(buckets []cost.Bucket) []DailyRow {
 	out := make([]DailyRow, 0, len(buckets))
 	for _, b := range buckets {
+		models := append([]string(nil), b.Models...)
+		if models == nil {
+			models = []string{}
+		}
 		out = append(out, DailyRow{
 			Date:                b.Key,
 			InputTokens:         b.InputTokens,
@@ -38,6 +42,7 @@ func BucketsToDailyRows(buckets []cost.Bucket) []DailyRow {
 			CacheReadTokens:     b.CacheReadTokens,
 			TotalTokens:         b.InputTokens + b.OutputTokens + b.CacheCreationTokens + b.CacheReadTokens,
 			CostUSD:             float64(b.Cost.Micros) / 1_000_000,
+			Models:              models,
 		})
 	}
 	return out

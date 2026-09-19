@@ -27,6 +27,9 @@ type Bucket struct {
 	Cost pricing.Money
 	// Model is the primary model used in the bucket (most-used).
 	Model string
+	// Models is the sorted list of distinct non-empty models seen in the
+	// bucket. Populated by Aggregate.
+	Models []string
 	// Count is the number of entries aggregated into the bucket.
 	Count int
 }

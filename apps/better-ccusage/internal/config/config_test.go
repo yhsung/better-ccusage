@@ -1,9 +1,12 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/cobra91/better-ccusage/apps/better-ccusage/internal/errs"
 )
 
 func TestLoad_MissingFile(t *testing.T) {
@@ -34,6 +37,21 @@ func TestLoad_ValidFile(t *testing.T) {
 	}
 	if len(c.ExtraConfigDirs) != 1 || c.ExtraConfigDirs[0] != "/foo" {
 		t.Errorf("ExtraConfigDirs: got %v", c.ExtraConfigDirs)
+	}
+}
+
+func TestLoad_InvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, []byte(`{not valid json`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON, got nil")
+	}
+	if !errors.Is(err, errs.ErrInvalidJSON) {
+		t.Errorf("Load(invalid JSON): error %v does not wrap ErrInvalidJSON", err)
 	}
 }
 

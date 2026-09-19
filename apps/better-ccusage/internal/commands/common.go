@@ -45,7 +45,7 @@ func (v costModeValue) Set(s string) error {
 	case "display":
 		*v.mode = cost.CostDisplay
 	default:
-		return fmt.Errorf("invalid --mode %q (want auto, calculate, or display): %w", s, errs.ErrIncompatibleMode)
+		return fmt.Errorf("invalid --mode %q (want auto, calculate, or display): %w", s, errs.ErrInvalidMode)
 	}
 	return nil
 }
@@ -60,8 +60,15 @@ func BindCommonFlags(cmd *cobra.Command) *CommonOpts {
 	cmd.PersistentFlags().StringVar(&opts.ConfigDir, "config-dir", "", "additional Claude config directory (comma-separated for multiple)")
 	cmd.PersistentFlags().String("since", "", "filter entries since this RFC3339 timestamp")
 	cmd.PersistentFlags().String("until", "", "filter entries until this RFC3339 timestamp")
-	// Pre-run parsing
+	// Pre-run parsing (chains any existing PreRunE so callers that set
+	// their own hook before/after binding keep both behaviors).
+	prevPreRunE := cmd.PreRunE
 	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if prevPreRunE != nil {
+			if err := prevPreRunE(cmd, args); err != nil {
+				return err
+			}
+		}
 		if s, _ := cmd.Flags().GetString("since"); s != "" {
 			t, err := time.Parse(time.RFC3339, s)
 			if err != nil {

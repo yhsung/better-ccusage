@@ -10,8 +10,14 @@ import (
 )
 
 // Aggregate groups entries by key into buckets. Pure function, no I/O.
+//
+// Each bucket records the most-frequent non-empty entry Model as its primary
+// Model (used by ApplyPrices for price lookup), the sorted distinct model
+// list in Models, and the sum of per-entry pre-calculated CostUSD in Cost
+// (so CostDisplay/CostAuto can honor upstream pre-calc).
 func Aggregate(entries []data.Entry, key GroupKey) []Bucket {
 	groups := make(map[string]*Bucket)
+	modelCounts := make(map[string]map[string]int)
 	for _, e := range entries {
 		gk := groupKeyFor(e, key)
 		b, ok := groups[gk]
@@ -23,10 +29,35 @@ func Aggregate(entries []data.Entry, key GroupKey) []Bucket {
 		b.OutputTokens += e.OutputTokens
 		b.CacheCreationTokens += e.CacheCreationTokens
 		b.CacheReadTokens += e.CacheReadTokens
+		if e.CostUSD != nil {
+			b.Cost.Micros += int64(*e.CostUSD * 1_000_000)
+		}
+		if e.Model != "" {
+			mc, ok := modelCounts[gk]
+			if !ok {
+				mc = make(map[string]int)
+				modelCounts[gk] = mc
+			}
+			mc[e.Model]++
+		}
 		b.Count++
 	}
 	out := make([]Bucket, 0, len(groups))
-	for _, b := range groups {
+	for gk, b := range groups {
+		if mc := modelCounts[gk]; len(mc) > 0 {
+			best, bestN := "", -1
+			for m, n := range mc {
+				if n > bestN || (n == bestN && m < best) {
+					best, bestN = m, n
+				}
+			}
+			b.Model = best
+			b.Models = make([]string, 0, len(mc))
+			for m := range mc {
+				b.Models = append(b.Models, m)
+			}
+			sort.Strings(b.Models)
+		}
 		out = append(out, *b)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Timestamp.Before(out[j].Timestamp) })
@@ -76,18 +107,21 @@ func applyPrice(b Bucket, price pricing.Price, mode CostMode) Bucket {
 	case CostCalculate:
 		return calcCost(b, price)
 	case CostDisplay:
-		// Display mode shows pre-calculated costUSD; without per-bucket
-		// pre-calc, it stays zero. Plans that need true pre-calc display
-		// should pre-compute costUSD per entry upstream.
+		// Display mode shows the pre-calculated costUSD summed by
+		// Aggregate; buckets without pre-calc remain zero.
 		return b
 	default: // CostAuto
 		return autoCost(b, price)
 	}
 }
 
-// autoCost calculates from tokens when pricing data is present; otherwise
-// leaves the bucket unchanged (cost stays zero).
+// autoCost prefers the pre-calculated costUSD summed by Aggregate when
+// present; otherwise it calculates from tokens when pricing data exists.
+// Buckets with neither pre-calc nor pricing remain zero.
 func autoCost(b Bucket, price pricing.Price) Bucket {
+	if b.Cost.Micros != 0 {
+		return b
+	}
 	if price.InputCostPerToken > 0 || price.OutputCostPerToken > 0 {
 		return calcCost(b, price)
 	}
@@ -97,10 +131,21 @@ func autoCost(b Bucket, price pricing.Price) Bucket {
 // calcCost multiplies each token count by its per-token price and sums the
 // result. Per-token prices are converted to micros first; token counts are
 // multiplied via Money.MulFloat so all arithmetic stays in int64.
+// Cache-read tokens are priced at CacheReadInputTokenCost; when that rate is
+// zero/unset (older entries), they fall back to the base input rate.
 func calcCost(b Bucket, p pricing.Price) Bucket {
-	in := pricing.Money{Micros: int64(p.InputCostPerToken * 1_000_000)}.MulFloat(float64(b.InputTokens + b.CacheReadTokens))
+	cacheReadRate := p.CacheReadInputTokenCost
+	if cacheReadRate == 0 {
+		cacheReadRate = p.InputCostPerToken
+	}
+	in := pricing.Money{Micros: int64(p.InputCostPerToken * 1_000_000)}.MulFloat(float64(b.InputTokens))
+	// NOTE: cache-read rates are often sub-micro per token (e.g. $0.30/MTok
+	// = 0.3 micros), which would truncate to zero if converted to micros
+	// per-unit first — so multiply rate × tokens × 1e6 in float before
+	// converting.
+	cacheR := pricing.Money{Micros: int64(cacheReadRate * float64(b.CacheReadTokens) * 1_000_000)}
 	cacheW := pricing.Money{Micros: int64(p.CacheCreationInputTokenCost * 1_000_000)}.MulFloat(float64(b.CacheCreationTokens))
 	out := pricing.Money{Micros: int64(p.OutputCostPerToken * 1_000_000)}.MulFloat(float64(b.OutputTokens))
-	b.Cost = in.Add(cacheW).Add(out)
+	b.Cost = in.Add(cacheR).Add(cacheW).Add(out)
 	return b
 }

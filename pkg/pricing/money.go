@@ -38,6 +38,7 @@ func (m Money) String() string {
 	sign := ""
 	if m.Micros < 0 {
 		sign = "-"
+		whole = -whole
 	}
 	return fmt.Sprintf("%s%d.%06d", sign, whole, frac)
 }

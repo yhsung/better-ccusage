@@ -72,6 +72,20 @@ func TestLoadPrices_SkipsNonModelEntries(t *testing.T) {
 	}
 }
 
+func TestLoadPrices_UnknownBadEntryErrors(t *testing.T) {
+	r := strings.NewReader(`{
+		"bogus-model": {"input_cost_per_token": "not-a-number"},
+		"claude-sonnet-4-5-20250929": {"input_cost_per_token": 0.000003, "output_cost_per_token": 0.000015}
+	}`)
+	_, err := LoadPrices(r)
+	if err == nil {
+		t.Fatal("expected error for unknown undecodable entry, got nil")
+	}
+	if !strings.Contains(err.Error(), "bogus-model") {
+		t.Errorf("error should name the bad entry, got: %v", err)
+	}
+}
+
 func TestLoadPrices_EmbeddedIsValid(t *testing.T) {
 	pt, err := LoadPrices(bytes.NewReader(EmbeddedPrices))
 	if err != nil {

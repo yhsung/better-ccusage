@@ -63,8 +63,8 @@ func TestBindCommonFlags_InvalidMode(t *testing.T) {
 	if err == nil {
 		t.Fatal("ParseFlags(--mode bogus): got nil, want error")
 	}
-	if !errors.Is(err, errs.ErrIncompatibleMode) {
-		t.Errorf("ParseFlags(--mode bogus): error %v does not wrap ErrIncompatibleMode", err)
+	if !errors.Is(err, errs.ErrInvalidMode) {
+		t.Errorf("ParseFlags(--mode bogus): error %v does not wrap ErrInvalidMode", err)
 	}
 }
 
@@ -82,6 +82,28 @@ func TestBindCommonFlags_SinceUntil(t *testing.T) {
 	}
 	if opts.Until == nil || opts.Until.Format("2006-01-02") != "2026-02-01" {
 		t.Errorf("until: got %v, want 2026-02-01", opts.Until)
+	}
+}
+
+func TestBindCommonFlags_PreRunEChainsExisting(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	called := false
+	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		called = true
+		return nil
+	}
+	opts := BindCommonFlags(cmd)
+	if err := cmd.ParseFlags([]string{"--since", "2026-01-01T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.PreRunE(cmd, nil); err != nil {
+		t.Fatalf("PreRunE: %v", err)
+	}
+	if !called {
+		t.Error("existing PreRunE was not called")
+	}
+	if opts.Since == nil {
+		t.Error("since was not parsed after chaining")
 	}
 }
 

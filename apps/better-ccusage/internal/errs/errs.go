@@ -10,4 +10,5 @@ var (
 	ErrInvalidJSON      = errors.New("invalid JSONL entry")
 	ErrConfigNotFound   = errors.New("config file not found")
 	ErrIncompatibleMode = errors.New("cost mode incompatible with data")
+	ErrInvalidMode      = errors.New("invalid cost mode")
 )
