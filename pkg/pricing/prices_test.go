@@ -80,6 +80,9 @@ func TestLoadPrices_EmbeddedIsValid(t *testing.T) {
 	if len(pt.rawPrices()) == 0 {
 		t.Error("embedded prices loaded but empty")
 	}
+	if got := len(pt.rawPrices()); got < 500 {
+		t.Errorf("embedded model count = %d, want >= 500 (guards silent per-entry skips on upstream schema drift)", got)
+	}
 	if _, ok := pt.LookupExact("claude-sonnet-4-5-20250929"); !ok {
 		t.Error("expected claude-sonnet-4-5-20250929 in embedded prices")
 	}
