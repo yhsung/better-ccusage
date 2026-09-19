@@ -24,6 +24,11 @@ type PriceTable struct {
 }
 
 // LoadPrices parses a JSON pricing file from r.
+//
+// Upstream LiteLLM JSON contains a "sample_spec" placeholder entry whose
+// cost fields are documentation strings, not numbers. Entries that do not
+// decode as a Price are skipped so both the embedded file and live fetches
+// parse cleanly. A top-level JSON syntax error still returns an error.
 func LoadPrices(r io.Reader) (*PriceTable, error) {
 	if r == nil {
 		return nil, fmt.Errorf("nil reader")
@@ -32,15 +37,21 @@ func LoadPrices(r io.Reader) (*PriceTable, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading prices: %w", err)
 	}
+	raw := rawPricesFile{}
 	if len(data) == 0 {
-		return &PriceTable{entries: rawPricesFile{}}, nil
+		return &PriceTable{entries: raw}, nil
 	}
-	var raw rawPricesFile
-	if err := json.Unmarshal(data, &raw); err != nil {
+	var entries map[string]json.RawMessage
+	if err := json.Unmarshal(data, &entries); err != nil {
 		return nil, fmt.Errorf("parsing prices: %w", err)
 	}
-	if raw == nil {
-		raw = rawPricesFile{}
+	for name, msg := range entries {
+		var p Price
+		if err := json.Unmarshal(msg, &p); err != nil {
+			continue // e.g. "sample_spec" docs placeholder; not a model
+		}
+		cp := p
+		raw[name] = &cp
 	}
 	return &PriceTable{entries: raw}, nil
 }
