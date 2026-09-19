@@ -161,6 +161,7 @@ func ToolError(err error) (*mcp.CallToolResult, any, error) {
 	code, message := MapError(err)
 	return ErrorResult(code, message, HintFor(code))
 }
+```
 
 - [ ] **Step 4: Write `apps/better-ccusage/internal/mcp/transport/errors_test.go`**
 
