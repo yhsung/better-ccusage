@@ -42,6 +42,8 @@ func TestMoney_String(t *testing.T) {
 		{Money{Micros: 0}, "0.000000"},
 		{Money{Micros: 1}, "0.000001"},
 		{Money{Micros: 123_456_789}, "123.456789"},
+		{Money{Micros: -1_500_000}, "-1.500000"},
+		{Money{Micros: -500_000}, "-0.500000"},
 	}
 	for _, tc := range cases {
 		if got := tc.in.String(); got != tc.want {
