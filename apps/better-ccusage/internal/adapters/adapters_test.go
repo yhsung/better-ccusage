@@ -31,3 +31,19 @@ func TestManager_EmptyEntries(t *testing.T) {
 		t.Errorf("expected 0 entries, got %d", len(out))
 	}
 }
+
+func TestCodexAdapter(t *testing.T) {
+	m := NewManager()
+	out := m.Normalize([]data.Entry{mkE("codex/kimi-for-coding")})
+	if out[0].Model != "kimi-for-coding" {
+		t.Errorf("expected stripped model, got %q", out[0].Model)
+	}
+}
+
+func TestOpencodeAdapter(t *testing.T) {
+	m := NewManager()
+	out := m.Normalize([]data.Entry{mkE("opencode/claude-sonnet-4-5-20250929")})
+	if out[0].Model != "claude-sonnet-4-5-20250929" {
+		t.Errorf("expected stripped model, got %q", out[0].Model)
+	}
+}

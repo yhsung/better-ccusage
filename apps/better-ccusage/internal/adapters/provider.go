@@ -44,7 +44,12 @@ func (m *Manager) Normalize(entries []data.Entry) []data.Entry {
 
 func builtins() []Provider {
 	return []Provider{
-		claudeAdapter{},
-		// Adapters added in Task 6.
+		codexAdapter{},
+		opencodeAdapter{},
+		devinAdapter{},
+		piAdapter{},
+		zcodeAdapter{},
+		droidAdapter{},
+		claudeAdapter{}, // last (fallback)
 	}
 }
